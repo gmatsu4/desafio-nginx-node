@@ -11,8 +11,8 @@ const config = {
   database: 'nodedb'
 };
 
-// Criar conexão com o banco
-const connection = mysql.createConnection(config);
+// Usar pool de conexões em vez de uma única conexão
+const pool = mysql.createPool(config);
 
 // Criar tabela se não existir
 const createTable = `
@@ -22,14 +22,19 @@ const createTable = `
   )
 `;
 
-connection.query(createTable);
+pool.query(createTable, (error) => {
+  if (error) {
+    console.error('Erro ao criar tabela:', error);
+  } else {
+    console.log('Tabela verificada/criada com sucesso!');
+  }
+});
 
-// Inserir um nome aleatório quando a aplicação é acessada
 app.get('/', (req, res) => {
   const name = `Pessoa ${Math.floor(Math.random() * 1000)}`;
-  const insertQuery = `INSERT INTO people(name) VALUES('${name}')`;
+  const insertQuery = `INSERT INTO people(name) VALUES(?)`;
   
-  connection.query(insertQuery, (error) => {
+  pool.query(insertQuery, [name], (error) => {
     if (error) {
       console.error('Erro ao inserir registro:', error);
       res.status(500).send('Erro ao inserir no banco de dados');
@@ -37,7 +42,7 @@ app.get('/', (req, res) => {
     }
 
     // Buscar todos os nomes
-    connection.query('SELECT name FROM people', (error, results) => {
+    pool.query('SELECT name FROM people', (error, results) => {
       if (error) {
         console.error('Erro ao buscar registros:', error);
         res.status(500).send('Erro ao consultar o banco de dados');
@@ -61,4 +66,15 @@ app.get('/', (req, res) => {
 
 app.listen(port, () => {
   console.log(`Aplicação rodando na porta ${port}`);
+});
+
+// Lidar com o encerramento da aplicação
+process.on('SIGINT', () => {
+  pool.end((err) => {
+    if (err) {
+      console.error('Erro ao fechar conexões com o banco:', err);
+    }
+    console.log('Conexões com o banco encerradas');
+    process.exit(0);
+  });
 });
